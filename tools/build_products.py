@@ -2,6 +2,8 @@
 """从 Open Food Facts 的 Parquet 导出筛出瑞典、丹麦、芬兰在售且录了配料的商品，生成 App 打包和每周更新用的离线商品库。
 
 数据：Open Food Facts（https://world.openfoodfacts.org），ODbL 1.0 许可。生成的商品库同样以 ODbL 1.0 公开。
+本脚本：PolyForm Noncommercial License 1.0.0（tools/LICENSE），不允许商用。
+Required Notice: Copyright kesar (https://github.com/ClaymanTwinkle)
 
 先下载 Hugging Face 上的 food.parquet（约 8 GB，全球商品），再用 DuckDB 筛。
 不要用 DuckDB 直接远程按列读：会发几千个范围请求，被 Hugging Face 按 IP 限流（429）。

@@ -21,4 +21,8 @@ Build it yourself: see the docstring in [`tools/build_products.py`](tools/build_
 
 ## License
 
-The database contains information from Open Food Facts, made available under the [Open Database License (ODbL) 1.0](https://opendatacommons.org/licenses/odbl/1-0/) (full text in [`LICENSE`](LICENSE)); individual contents are under the [Database Contents License (DbCL) 1.0](https://opendatacommons.org/licenses/dbcl/1-0/). This filtered database is published under the same ODbL 1.0.
+**Data** (the published `products.json.zlib`): contains information from Open Food Facts, made available under the [Open Database License (ODbL) 1.0](https://opendatacommons.org/licenses/odbl/1-0/) (full text in [`LICENSE`](LICENSE)); individual contents are under the [Database Contents License (DbCL) 1.0](https://opendatacommons.org/licenses/dbcl/1-0/). This filtered database is published under the same ODbL 1.0.
+
+**Code** (everything in [`tools/`](tools/) and [`.github/`](.github/)): [PolyForm Noncommercial License 1.0.0](tools/LICENSE). Free for personal, research and other noncommercial use; commercial use is not permitted.
+
+Required Notice: Copyright kesar (https://github.com/ClaymanTwinkle)
