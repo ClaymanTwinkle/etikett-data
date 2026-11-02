@@ -1,0 +1,35 @@
+# 每周重新生成离线商品库，发布到 products-latest 这个 Release，App 每周从这里下载新版（Etikett App 的 ProductStore）。
+# 数据来自 Open Food Facts，ODbL 1.0 许可；生成的商品库同样以 ODbL 1.0 公开。
+name: products
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"  # 每周一 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install duckdb
+      - name: 下载 Open Food Facts 的 Parquet 导出（约 8 GB）
+        run: curl -fL --retry 5 --retry-delay 30 -o "$RUNNER_TEMP/food.parquet" https://huggingface.co/datasets/openfoodfacts/product-database/resolve/main/food.parquet
+      - name: 筛出瑞典、丹麦、芬兰的商品
+        run: python -I tools/build_products.py --parquet "$RUNNER_TEMP/food.parquet" --cache "$RUNNER_TEMP/nordic.parquet" --out dist
+      - name: 发布
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="Offline product database for Etikett, built $(date -u +%F) from Open Food Facts (https://world.openfoodfacts.org).
+          Licensed under the Open Database License (ODbL) 1.0: https://opendatacommons.org/licenses/odbl/1-0/"
+          gh release view products-latest >/dev/null 2>&1 || gh release create products-latest --title "Product database" --notes "$notes" --latest=false
+          gh release edit products-latest --notes "$notes"
+          gh release upload products-latest dist/products.json.zlib dist/manifest.json --clobber
