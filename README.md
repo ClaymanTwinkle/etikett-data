@@ -1,6 +1,6 @@
 # etikett-data
 
-Offline product database for the Etikett app (ingredient scanner for Sweden, Denmark and Finland).
+Offline product database for the Klarblik app (ingredient scanner for Sweden, Denmark and Finland).
 
 Every Monday a GitHub Action filters the [Open Food Facts](https://world.openfoodfacts.org) export down to products sold in Sweden, Denmark or Finland that have an ingredient list, and publishes the result to the release [`products-latest`](../../releases/tag/products-latest):
 

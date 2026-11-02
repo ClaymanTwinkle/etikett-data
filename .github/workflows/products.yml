@@ -28,7 +28,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          notes="Offline product database for Etikett, built $(date -u +%F) from Open Food Facts (https://world.openfoodfacts.org).
+          notes="Offline product database for the Klarblik app, built $(date -u +%F) from Open Food Facts (https://world.openfoodfacts.org).
           Licensed under the Open Database License (ODbL) 1.0: https://opendatacommons.org/licenses/odbl/1-0/"
           gh release view products-latest >/dev/null 2>&1 || gh release create products-latest --title "Product database" --notes "$notes" --latest=false
           gh release edit products-latest --notes "$notes"
