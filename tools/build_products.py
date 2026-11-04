@@ -12,19 +12,25 @@ Required Notice: Copyright kesar (https://github.com/ClaymanTwinkle)
   products.json.zlib   商品库：JSON 用 zlib 原始 deflate 压缩（App 用 NSData.decompressed(using: .zlib) 解开）
   manifest.json        版本（生成日期）、商品数、products.json.zlib 的 SHA-256 和字节数
 
-商品库 JSON：{"version": "2026-11-02", "license": ..., "products": {条码: [名称, 规格, 品牌, 正面图路径, {语言: 配料}]}}
+商品库 JSON：{"version": "2026-11-02", "license": ..., "products": {条码: [名称, 规格, 品牌, 正面图路径, {语言: 配料}, [分类], [市场], 配料认出比例, 扫描人数]}}
   - 配料只留 sv、da、fi、en 和商品主语言那一栏（主语言记作 "main"，和前面某种重复时不存）
   - 正面图路径是 images.openfoodfacts.org/images/products/ 后面那段，没有就是空字符串
+  - 分类是 Open Food Facts 的 categories_tags，从大类到小类；只留并进了词表的 en:、xx: 标签
+  - 市场是 se、dk、fi（来自 countries_tags）
+  - 配料认出比例：Open Food Facts 拆出的配料里它认识的百分比（0–100），太低多半是识字乱码或不是配料表
+  - 扫描人数是 unique_scans_n，同样简单的商品里优先列常见的
+  - 后四列是 2026-11 加在末尾的；旧版 App 只读前五列，不受影响
 
 用法：
   python3 -m venv /tmp/offdb/venv && /tmp/offdb/venv/bin/pip install duckdb
   curl -L -C - -o /tmp/offdb/food.parquet https://huggingface.co/datasets/openfoodfacts/product-database/resolve/main/food.parquet
   /tmp/offdb/venv/bin/python -I tools/build_products.py --parquet /tmp/offdb/food.parquet --out <输出目录>
 """
-import argparse, datetime, hashlib, json, os, re, zlib
+import argparse, datetime, hashlib, html, json, os, re, zlib
 
 COUNTRIES = ['en:sweden', 'en:denmark', 'en:finland']
 LANGUAGES = ['sv', 'da', 'fi', 'en']
+MARKETS = {'en:sweden': 'se', 'en:denmark': 'dk', 'en:finland': 'fi'}
 LICENSE = ('Contains information from Open Food Facts (https://world.openfoodfacts.org), '
            'made available under the Open Database License (ODbL) 1.0: https://opendatacommons.org/licenses/odbl/1-0/')
 
@@ -36,13 +42,16 @@ def fetch(parquet, cache):
         countries = ' OR '.join(f"list_contains(countries_tags, '{x}')" for x in COUNTRIES)
         c.execute(f"""COPY (
             SELECT code, product_name, brands, quantity, ingredients_text, lang,
+                   categories_tags, countries_tags, ingredients_n, unknown_ingredients_n, unique_scans_n,
                    list_transform(list_filter(images, lambda i: i.key LIKE 'front_%'),
                                   lambda i: struct_pack(k := i.key, r := i.rev)) AS fronts
             FROM '{parquet}'
             WHERE ({countries}) AND coalesce(obsolete, false) = false
               AND len(list_filter(ingredients_text, lambda t: length(trim(coalesce(t.text, ''))) > 0)) > 0
         ) TO '{cache}' (FORMAT parquet)""")
-    return c.execute(f"SELECT code, product_name, brands, quantity, ingredients_text, lang, fronts FROM '{cache}'").fetchall()
+    return c.execute(f"""SELECT code, product_name, brands, quantity, ingredients_text, lang, fronts,
+                                categories_tags, countries_tags, ingredients_n, unknown_ingredients_n, unique_scans_n
+                         FROM '{cache}'""").fetchall()
 
 
 def image_path(code, fronts, lang):
@@ -58,14 +67,29 @@ def image_path(code, fronts, lang):
     return ''
 
 
+def categories(tags):
+    """en:Dagligvarer、sv:rismellanmål 这类没并进词表的写法不留，同类比较用不上。"""
+    return [t for t in tags or [] if re.fullmatch(r'(en|xx):[a-z0-9-]+', t)]
+
+
+def known_percent(total, unknown):
+    return round(100 * (total - (unknown or 0)) / total) if total else 0
+
+
 def clean(text):
-    """去掉 Open Food Facts 标过敏原用的 <span class="allergen">…</span> 和 _Vetemjöl_、vete_mjöl，和 App 里 OfflineProduct.cleanIngredients 一致。"""
+    """去掉 Open Food Facts 标过敏原用的 <span class="allergen">…</span> 和 _Vetemjöl_、vete_mjöl，还原 &gt; 这类转义符，和 App 里 OfflineProduct.cleanIngredients 一致。"""
     text = re.sub(r'<[^>]+>', '', text)
     text = text.replace('_', '')  # 合成词里标一半的也有：vete_mjöl、skum_mjölk
+    text = html.unescape(text)
     return re.sub(r'\s+', ' ', text).strip()
 
 
-def localized(entries, lang, cleaner=lambda t: t.strip()):
+def clean_name(text):
+    """M&amp;M's、l\\'avoine 这类录入时留下的转义符还原。"""
+    return html.unescape(text).replace("\\'", "'").strip()
+
+
+def localized(entries, lang, cleaner=clean_name):
     texts = {e['lang']: cleaner(e['text']) for e in entries or [] if e['text'] and e['text'].strip()}
     texts = {k: v for k, v in texts.items() if v}
     return texts, texts.get('main') or texts.get(lang)
@@ -79,7 +103,7 @@ def main():
     args = parser.parse_args()
 
     products = {}
-    for code, names, brands, quantity, ingredients, lang, fronts in fetch(args.parquet, args.cache):
+    for code, names, brands, quantity, ingredients, lang, fronts, cats, countries, total, unknown, scans in fetch(args.parquet, args.cache):
         if not code or not code.isdigit():
             continue
         texts, main_text = localized(ingredients, lang, clean)
@@ -91,7 +115,9 @@ def main():
         name_texts, main_name = localized(names, lang)
         name = next((name_texts[l] for l in LANGUAGES if l in name_texts), main_name or '')
         brand = (brands or '').split(',')[0].strip()
-        products[code] = [name, (quantity or '').strip(), brand, image_path(code, fronts, lang), kept]
+        markets = [m for tag, m in MARKETS.items() if tag in (countries or [])]
+        products[code] = [name, (quantity or '').strip(), brand, image_path(code, fronts, lang), kept,
+                          categories(cats), markets, known_percent(total, unknown), scans or 0]
 
     version = datetime.date.today().isoformat()
     doc = {'version': version, 'license': LICENSE, 'products': dict(sorted(products.items()))}

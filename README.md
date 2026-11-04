@@ -10,12 +10,15 @@ Every Monday a GitHub Action filters the [Open Food Facts](https://world.openfoo
 Format:
 
 ```json
-{"version": "2026-11-02", "license": "...", "products": {"<barcode>": ["name", "quantity", "brand", "front image path", {"sv": "ingredients", "da": "...", "fi": "...", "en": "...", "main": "..."}]}}
+{"version": "2026-11-02", "license": "...", "products": {"<barcode>": ["name", "quantity", "brand", "front image path", {"sv": "ingredients", "da": "...", "fi": "...", "en": "...", "main": "..."}, ["en:category", "..."], ["se", "dk", "fi"], 90, 12]}}
 ```
 
 - Ingredient texts are kept in Swedish, Danish, Finnish and English; `main` is the product's main-language text, stored only when it differs from those.
 - Allergen markup from Open Food Facts (`<span class="allergen">`, `_word_`) is removed.
 - The image path is relative to `https://images.openfoodfacts.org/images/products/`.
+- Categories are Open Food Facts `categories_tags`, broadest first; only `en:` and `xx:` tags that made it into the taxonomy are kept.
+- Markets are `se`, `dk`, `fi`, from `countries_tags`.
+- The second-to-last number is the share of ingredients Open Food Facts recognised (0–100); the last is `unique_scans_n`.
 
 Build it yourself: see the docstring in [`tools/build_products.py`](tools/build_products.py).
 
